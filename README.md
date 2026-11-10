@@ -37,10 +37,11 @@ Source data (about 1.5 GB for northern Italy), into `data/`:
 
 ## The steps, in order
 
-Each step that needs the current state of the map reads it from the live server first:
+Each step that needs the current state of the map reads it from the server first. The project lives inside the
+game server's container at `/data/map-projects/<map-id>.json`:
 
 ```bash
-ssh claude@82.165.32.162 'docker exec umpire-umpire-1 cat /data/map-projects/italy-1796.json' > work/italy-1796/project.json
+ssh <user>@<your-server> 'docker exec umpire-umpire-1 cat /data/map-projects/italy-1796.json' > work/italy-1796/project.json
 ```
 
 | Step | Command | Check before moving on |
