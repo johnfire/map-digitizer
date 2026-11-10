@@ -1,0 +1,23 @@
+# Bacler d'Albe, "Carta dell'Italia superiore", sheet 1 of 2 (BnF/Gallica btv1b53102776d, via Wikimedia).
+id = "italy-1796"
+scan = "../games/Carta*.jpg"
+pack_dir = "../games/napoleon-1796/pack-italy-1796"
+osm_files = ["data/openstreetmap/nord-ovest.osm.pbf", "data/openstreetmap/nord-est.osm.pbf"]
+dem_dir = "data/copernicus-dem"
+# Measured from the printed scale bars (11.65 scan pixels per km) and checked on 36 town pairs.
+km_per_pixel = 0.08584
+
+# Casale/Vercelli in the north-west to Pontremoli in the south-east, down to the fold below Savona.
+[region]
+left = 2770
+top = 3643
+width = 1676
+height = 1492
+
+# Names as printed in 1796 that differ from today's OpenStreetMap names.
+[town_aliases]
+Casale = "Casale Monferrato"
+Novi = "Novi Ligure"
+Nizza = "Nizza Monferrato"
+Acqui = "Acqui Terme"
+"Porto Fino" = "Portofino"
