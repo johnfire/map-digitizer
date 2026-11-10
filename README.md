@@ -70,6 +70,10 @@ new batch once. It never changes a place a person has moved or confirmed, and ne
 Copy `maps/italy-1796.toml`, set the scan, region, scale and scenario pack, and download source data for its area.
 Expect town detection to need new work: it is tuned to engraved ring symbols, and other maps draw towns differently.
 
+## Licence
+
+The code is MIT licensed (see `LICENSE`). The data it downloads has its own terms, below.
+
 ## Credits
 
 Elevation: Copernicus GLO-30 © DLR e.V. 2010–2014 and © Airbus Defence and Space GmbH 2014–2018, provided under
