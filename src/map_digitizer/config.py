@@ -5,6 +5,9 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
+# Northern Italy, the first map's area: UTM zone 32N and a south, west, north, east box in degrees.
+DEFAULT_CRS = 32632
+DEFAULT_BOUNDS = (43.9, 7.4, 46.0, 11.2)
 
 
 @dataclass(frozen=True)
@@ -27,6 +30,12 @@ class MapConfig:
     osm_files: list[Path]
     dem_dir: Path
     town_aliases: dict[str, str] = field(default_factory=dict)
+    # The UTM zone real positions are measured in (EPSG code); far from Italy, use the map's own zone.
+    crs: int = DEFAULT_CRS
+    # Where to read OpenStreetMap places and rivers from: south, west, north, east in degrees.
+    bounds: tuple[float, float, float, float] = DEFAULT_BOUNDS
+    # Elevation grid cell size in scan pixels; pick it so a cell is roughly half a kilometre on the map's scale.
+    relief_step: int = 8
 
 
 def _resolve(relative: str) -> Path:
@@ -54,4 +63,7 @@ def load_config(path: Path) -> MapConfig:
         osm_files=[_resolve(entry) for entry in raw.get("osm_files", [])],
         dem_dir=_resolve(raw.get("dem_dir", "data/copernicus-dem")),
         town_aliases=dict(raw.get("town_aliases", {})),
+        crs=int(raw.get("crs", DEFAULT_CRS)),
+        bounds=tuple(float(value) for value in raw.get("bounds", DEFAULT_BOUNDS)),
+        relief_step=int(raw.get("relief_step", 8)),
     )

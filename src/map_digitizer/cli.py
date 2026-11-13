@@ -30,7 +30,7 @@ def _real_places(config: MapConfig) -> list[osm_data.RealPlace]:
     cache = config.work_dir / "osm-places.json"
     if cache.exists():
         return [osm_data.RealPlace(**place) for place in json.loads(cache.read_text(encoding="utf-8"))]
-    places = osm_data.read_places(config.osm_files, osm_data.BoundingBox(43.9, 7.4, 46.0, 11.2))
+    places = osm_data.read_places(config.osm_files, osm_data.BoundingBox(*config.bounds))
     config.work_dir.mkdir(parents=True, exist_ok=True)
     cache.write_text(json.dumps([place.__dict__ for place in places], ensure_ascii=False), encoding="utf-8")
     return places
@@ -86,10 +86,10 @@ def command_align(config: MapConfig, project: dict) -> Georeference:
     """Fit the scan to real geography from named places, then tighten it with ring-to-town matches."""
     real = _real_places(config)
     named, named_scan, named_lonlat = _named_anchors(config, project, real)
-    named_real = lonlat_to_metres(named_lonlat[:, 0], named_lonlat[:, 1])
+    named_real = lonlat_to_metres(named_lonlat[:, 0], named_lonlat[:, 1], config.crs)
     named, named_scan, named_real = _without_outliers(named, named_scan, named_real)
     towns = [place for place in real if place.kind in ("city", "town", "village")]
-    town_real = lonlat_to_metres(np.array([town.lon for town in towns]), np.array([town.lat for town in towns]))
+    town_real = lonlat_to_metres(np.array([town.lon for town in towns]), np.array([town.lat for town in towns]), config.crs)
     rings = [place for place in project["places"] if place.get("confidence") != "low"]
     ring_scan = np.array([[place["x"], place["y"]] for place in rings], float)
     scan_anchors, real_anchors, matches = refine_with_matches(named_scan, named_real, ring_scan, town_real)
@@ -98,24 +98,45 @@ def command_align(config: MapConfig, project: dict) -> Georeference:
           f"90th {np.percentile(errors, 90):.2f} km, worst {errors.max():.2f} km ({_trusted_name(named[int(errors.argmax())])})")
     config.work_dir.mkdir(parents=True, exist_ok=True)
     (config.work_dir / "georef.json").write_text(json.dumps({
-        "scan_anchors": scan_anchors.tolist(), "real_anchors": real_anchors.tolist(),
+        "crs": config.crs, "scan_anchors": scan_anchors.tolist(), "real_anchors": real_anchors.tolist(),
         "suggested_names": {rings[index]["id"]: towns[town].name for index, town in matches.items()},
     }, ensure_ascii=False), encoding="utf-8")
-    return Georeference(scan_anchors, real_anchors)
+    return Georeference(scan_anchors, real_anchors, crs=config.crs)
+
+
+def command_anchors(config: MapConfig, anchors_file: Path) -> Georeference:
+    """
+    Fit the scan to real geography from towns a person read off it: a list of {name, lat, lon, x, y}. For maps whose
+    towns the detector cannot find, and a check on any map: every anchor is tested by leaving it out.
+    """
+    anchors = json.loads(anchors_file.read_text(encoding="utf-8"))
+    scan_anchors = np.array([[anchor["x"], anchor["y"]] for anchor in anchors], float)
+    real_anchors = lonlat_to_metres(np.array([anchor["lon"] for anchor in anchors]), np.array([anchor["lat"] for anchor in anchors]), config.crs)
+    errors = leave_out_errors_km(scan_anchors, real_anchors, np.arange(len(anchors)), exclusion_metres=1.0)
+    print(f"{len(anchors)} anchors; tested error median {np.median(errors):.2f} km, worst {errors.max():.2f} km "
+          f"({anchors[int(errors.argmax())]['name']})")
+    config.work_dir.mkdir(parents=True, exist_ok=True)
+    (config.work_dir / "georef.json").write_text(json.dumps({
+        "crs": config.crs, "scan_anchors": scan_anchors.tolist(), "real_anchors": real_anchors.tolist(),
+        "anchors_from": str(anchors_file), "suggested_names": {},
+    }, ensure_ascii=False), encoding="utf-8")
+    return Georeference(scan_anchors, real_anchors, crs=config.crs)
 
 
 def _saved_georeference(config: MapConfig) -> tuple[Georeference, dict]:
     saved = json.loads((config.work_dir / "georef.json").read_text(encoding="utf-8"))
-    return Georeference(np.array(saved["scan_anchors"]), np.array(saved["real_anchors"])), saved
+    # Saves from before the zone was a setting were all made in the default zone.
+    crs = saved.get("crs", config.crs)
+    return Georeference(np.array(saved["scan_anchors"]), np.array(saved["real_anchors"]), crs=crs), saved
 
 
 def command_layers(config: MapConfig) -> None:
     georef, _ = _saved_georeference(config)
     directory = config.pack_dir / "map-layers"
     directory.mkdir(parents=True, exist_ok=True)
-    relief = layers.build_relief_grid(config.dem_dir, georef, config.region)
+    relief = layers.build_relief_grid(config.dem_dir, georef, config.region, step=config.relief_step)
     np.savez_compressed(directory / f"{config.map_id}-relief.npz", **relief)
-    rivers = layers.project_rivers(osm_data.read_rivers(config.osm_files, osm_data.BoundingBox(43.9, 7.4, 46.0, 11.2)), georef, config.region)
+    rivers = layers.project_rivers(osm_data.read_rivers(config.osm_files, osm_data.BoundingBox(*config.bounds)), georef, config.region)
     (directory / f"{config.map_id}-rivers.json").write_text(json.dumps(rivers, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
     print(f"relief grid {relief['slope'].shape}, rivers {len(rivers)} -> {directory}")
 
@@ -150,13 +171,19 @@ def command_names(config: MapConfig, project: dict) -> None:
 
 def main(arguments: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser(prog="map-digitizer", description=__doc__)
-    parser.add_argument("step", choices=["detect", "align", "layers", "roads", "names"])
+    parser.add_argument("step", choices=["detect", "align", "anchors", "layers", "roads", "names"])
     parser.add_argument("--config", type=Path, required=True, help="the map's settings, e.g. maps/italy-1796.toml")
     parser.add_argument("--project", type=Path, help="current project JSON from the Map Builder (see README)")
+    parser.add_argument("--anchors", type=Path, help="towns read off the scan: JSON list of {name, lat, lon, x, y}")
     options = parser.parse_args(arguments)
     config = load_config(options.config)
     if options.step == "layers":
         command_layers(config)
+        return
+    if options.step == "anchors":
+        if options.anchors is None:
+            parser.error("the anchors step needs --anchors")
+        command_anchors(config, options.anchors)
         return
     if options.project is None:
         parser.error(f"the {options.step} step needs --project")

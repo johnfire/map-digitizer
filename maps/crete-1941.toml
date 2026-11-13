@@ -1,0 +1,22 @@
+# War Office GSGS 4160 "Crete", 1:400,000 (1941, 4th edition 1942, US Army Map Service reprint 1943), Princeton copy.
+# Towns on this sheet are dots and squares, not the rings the detector looks for: the georeference comes from towns
+# read off the scan by hand (the anchors step), listed in the Crete repo's scans/crete-1941-anchors.json.
+id = "crete-1941"
+scan = "../games/crete-1941/scans/crete-1941.jpg"
+pack_dir = "../games/crete-1941/pack-crete-1941"
+osm_files = ["data/openstreetmap/greece-latest.osm.pbf"]
+dem_dir = "data/copernicus-dem-crete"
+# Fitted through seven towns, Kastelli to Sitia; the printed scale bar reads 0.0255.
+km_per_pixel = 0.0253
+# Crete lies in UTM zone 35N; northern Italy's zone 32N would stretch it badly.
+crs = 32635
+bounds = [34.75, 23.45, 35.75, 26.4]
+# 24 pixels is 0.6 km on this sheet, about the 1796 grid's cell size.
+relief_step = 24
+
+# The map frame, the whole island with Gavdos and Antikythera.
+[region]
+left = 640
+top = 960
+width = 10980
+height = 5980
